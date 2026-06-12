@@ -50,15 +50,22 @@ error.
 ## Run
 
 ```bash
-# Local
-cp .env.example .env && $EDITOR .env
-npm install
-npm start            # listens on :8070
+cp .env.example .env && $EDITOR .env   # set ORDER_SERVICE_TOKEN + wallet creds
 
-# Docker (build context is the crypto-predictor root)
-docker build -f order-service/Dockerfile -t pm-order-service ..
-docker run --env-file order-service/.env -p 8070:8070 pm-order-service
+# Docker Compose (recommended — for the dedicated order host)
+docker compose up -d --build           # listens on :8070
+
+# …or plain Docker
+docker build -t pm-order-service .
+docker run --env-file .env -p 8070:8070 pm-order-service
+
+# …or Node directly
+npm install && npm start
 ```
+
+`docker-compose.yml` binds the port to all interfaces by default (guarded by the
+bearer token). Set `ORDER_SERVICE_BIND` in `.env` to pin it to a private/VPN IP,
+and `ORDER_SERVICE_PORT` to change the published port.
 
 Smoke test:
 

@@ -1,0 +1,31 @@
+# Standalone deployment for the Polymarket order-execution service.
+#
+# On the dedicated order host:
+#   cp .env.example .env && edit .env   (set ORDER_SERVICE_TOKEN + wallet creds)
+#   docker compose up -d --build
+#
+# The dashboard reaches this over the network via ORDER_SERVICE_URL. The port
+# binds to all interfaces by default so a remote dashboard can connect; the
+# bearer token (ORDER_SERVICE_TOKEN) is what guards it. Set ORDER_SERVICE_BIND to
+# pin it to a specific interface (e.g. a private/VPN IP) — recommended.
+services:
+  order-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: polymarket-order-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: "8070"
+      NODE_ENV: production
+    ports:
+      # ORDER_SERVICE_BIND defaults to 0.0.0.0; override in .env to a private IP.
+      - "${ORDER_SERVICE_BIND:-0.0.0.0}:${ORDER_SERVICE_PORT:-8070}:8070"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8070/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
