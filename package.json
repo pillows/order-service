@@ -1,0 +1,15 @@
+{
+  "name": "polymarket-order-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone authenticated Polymarket order-execution microservice. Holds the trading wallet and is the ONLY component that signs and submits real CLOB orders. The crypto-predictor dashboard calls it over HTTP; it is meant to run on a dedicated, locked-down host.",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@polymarket/clob-client": "^5.8.1",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.16.0"
+  }
+}
