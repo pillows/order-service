@@ -2,25 +2,29 @@
  * Polymarket CLOB trading core — the authenticated, real-funds layer.
  *
  * This module owns the trading wallet and is the only place that signs and
- * submits live orders. Auth mirrors scripts/check-balance-sdk.mjs and the
- * official Python quickstart:
+ * submits live orders. It uses @polymarket/clob-client-v2, which signs orders
+ * against the CTF Exchange V2 and settles in pUSD (the collateral token used
+ * for all trading post the 2026-04-28 migration). The legacy v1 SDK signed
+ * against the old exchange/USDC.e and is rejected for pUSD-funded accounts.
+ *
+ * Auth mirrors scripts/check-balance-sdk.mjs and the official quickstart:
  *   - L1: the wallet PRIVATE KEY signs the EIP-712 ClobAuth struct via
  *     createOrDeriveApiKey(), yielding deterministic L2 API creds.
  *   - L2: those creds (HMAC) authenticate /order; the SDK handles both.
  * The ethers v6 wallet is wrapped in a v5-shaped signer ({ _signTypedData })
- * because the SDK detects signers by the v5 method name.
+ * because the SDK detects ethers signers by the v5 method name.
  *
  * signature_type / funder follow the account: 0 = EOA (signer is the funder),
  * 1 = email/magic proxy, 2 = browser-wallet proxy (funder is the proxy that
  * holds collateral). For a proxy the funder address is REQUIRED — orders pull
  * collateral from it.
  *
- * Collateral allowances (Exchange + NegRiskExchange spend of pUSD/USDC) must
- * already be set for the funder; trading on polymarket.com once does this. We do
- * not auto-approve — a missing allowance surfaces as an order error.
+ * Collateral allowances (Exchange V2 spend of pUSD) must already be set for the
+ * funder; trading on polymarket.com once does this. We do not auto-approve — a
+ * missing allowance surfaces as an order error.
  */
 import { Wallet } from "ethers";
-import { ClobClient, Chain, OrderType, Side, AssetType } from "@polymarket/clob-client";
+import { ClobClient, Chain, OrderType, Side, AssetType } from "@polymarket/clob-client-v2";
 
 const DEFAULT_CLOB = "https://clob.polymarket.com";
 
@@ -79,9 +83,19 @@ async function getClient() {
   };
   const funder = cfg.funder ?? undefined;
 
-  const bootstrap = new ClobClient(cfg.clobUrl, Chain.POLYGON, signer, undefined, cfg.signatureType, funder);
+  // v2 uses an options-object constructor and SignatureTypeV2 (0=EOA,
+  // 1=POLY_PROXY, 2=POLY_GNOSIS_SAFE, 3=POLY_1271). The numeric values match
+  // the legacy enum, so the configured POLYMARKET_SIGNATURE_TYPE carries over.
+  const base = {
+    host: cfg.clobUrl,
+    chain: Chain.POLYGON,
+    signer,
+    signatureType: cfg.signatureType,
+    funderAddress: funder,
+  };
+  const bootstrap = new ClobClient(base);
   const creds = await bootstrap.createOrDeriveApiKey();
-  const client = new ClobClient(cfg.clobUrl, Chain.POLYGON, signer, creds, cfg.signatureType, funder);
+  const client = new ClobClient({ ...base, creds });
 
   cache = {
     client,

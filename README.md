@@ -42,8 +42,8 @@ Copy `.env.example` to `.env` and fill it in (see that file for details):
 - `POLYMARKET_WALLET_PRIVATE_KEY`, `POLYMARKET_ADDRESS`,
   `POLYMARKET_SIGNATURE_TYPE`, `POLYMARKET_CLOB_URL` — the trading account.
 
-Collateral **allowances** (Exchange + NegRiskExchange spend of pUSD/USDC) must
-already be set for the funder. Trading on polymarket.com once does this; the
+Collateral **allowances** (CTF Exchange V2 + Neg Risk Exchange V2 spend of pUSD)
+must already be set for the funder. Trading on polymarket.com once does this; the
 service does not auto-approve and will surface a missing allowance as an order
 error.
 
