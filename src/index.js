@@ -68,10 +68,16 @@ function authError(req) {
   return null;
 }
 
+const log = (msg) => console.log(`[order-service] ${new Date().toISOString()} ${msg}`);
+
 const server = http.createServer(async (req, res) => {
   const url = req.url ?? "/";
   const path = url.split("?")[0];
   const method = req.method ?? "GET";
+
+  // Access log to stdout (visible in `docker compose logs`). Skip /health so the
+  // 15s container healthcheck doesn't flood the log. Auth headers are never logged.
+  if (path !== "/health") log(`${method} ${path}`);
 
   try {
     // Health is public so orchestrators and the dashboard can probe reachability
@@ -91,7 +97,10 @@ const server = http.createServer(async (req, res) => {
 
     // Everything below is authenticated.
     const auth = authError(req);
-    if (auth) return json(res, auth[0], { error: auth[1] });
+    if (auth) {
+      log(`${method} ${path} -> ${auth[0]} ${auth[1]}`);
+      return json(res, auth[0], { error: auth[1] });
+    }
 
     if (path === "/balance" && method === "GET") {
       const balanceUsdValue = await balanceUsd();

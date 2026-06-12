@@ -24,6 +24,19 @@ import { ClobClient, Chain, OrderType, Side, AssetType } from "@polymarket/clob-
 
 const DEFAULT_CLOB = "https://clob.polymarket.com";
 
+const ts = () => new Date().toISOString();
+const log = (msg) => console.log(`[order-service] ${ts()} ${msg}`);
+const logErr = (msg) => console.error(`[order-service] ${ts()} ${msg}`);
+/** JSON that won't throw on circular refs and is truncated to keep logs sane. */
+function safeJson(v) {
+  try {
+    const s = JSON.stringify(v);
+    return s.length > 2000 ? `${s.slice(0, 2000)}…` : s;
+  } catch {
+    return String(v);
+  }
+}
+
 function readConfig() {
   const privateKey = process.env.POLYMARKET_WALLET_PRIVATE_KEY;
   if (!privateKey) return null;
@@ -108,11 +121,15 @@ function clampPrice(p) {
 export async function placeBuyOrder({ tokenId, price, size }) {
   if (!tokenId) throw new Error("tokenId required");
   if (!Number.isFinite(size) || size <= 0) throw new Error(`invalid size: ${size}`);
+  const limitPrice = clampPrice(price);
   const { client } = await getClient();
+  // Logs go to stdout/stderr so `docker compose logs order-service` shows the
+  // full order flow. Only order params/results are logged — never keys or creds.
+  log(`BUY token=${tokenId} price=${limitPrice} size=${size}`);
   try {
     const order = await client.createOrder({
       tokenID: tokenId,
-      price: clampPrice(price),
+      price: limitPrice,
       size,
       side: Side.BUY,
     });
@@ -120,6 +137,12 @@ export async function placeBuyOrder({ tokenId, price, size }) {
     // A BUY fill credits outcome tokens: takingAmount = shares received.
     const filled = Number(resp?.takingAmount);
     const success = Boolean(resp?.success);
+    if (success) {
+      log(`FILLED id=${resp?.orderID} status=${resp?.status} shares=${filled} spent=${resp?.makingAmount}`);
+    } else {
+      // The real reason from the CLOB is the whole point of these logs — dump it.
+      logErr(`REJECTED token=${tokenId}: ${resp?.errorMsg || "(no errorMsg)"} | resp=${safeJson(resp)}`);
+    }
     return {
       ok: success,
       orderId: resp?.orderID ?? null,
@@ -132,6 +155,9 @@ export async function placeBuyOrder({ tokenId, price, size }) {
     // Drop the cached client so the next attempt re-derives creds (e.g. after a
     // key rotation or auth expiry).
     cache = null;
+    // Surface the underlying HTTP/SDK error body when present (axios-style).
+    const detail = err?.response?.data ? ` | body=${safeJson(err.response.data)}` : "";
+    logErr(`ERROR token=${tokenId}: ${err?.message ?? err}${detail}`);
     throw err;
   }
 }
