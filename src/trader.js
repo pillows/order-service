@@ -151,19 +151,28 @@ export async function placeBuyOrder({ tokenId, price, size }) {
     // A BUY fill credits outcome tokens: takingAmount = shares received.
     const filled = Number(resp?.takingAmount);
     const success = Boolean(resp?.success);
+    // The CLOB reports a failure two different ways: a structured order response
+    // (resp.errorMsg) or a raw API error body ({ error, status }). Read both so
+    // the real reason — e.g. a 403 geoblock — reaches the caller instead of a
+    // generic "order rejected".
+    const upstreamCode = Number.isFinite(Number(resp?.status)) ? Number(resp.status) : null;
+    const reason = resp?.errorMsg || resp?.error || "order rejected";
     if (success) {
       log(`FILLED id=${resp?.orderID} status=${resp?.status} shares=${filled} spent=${resp?.makingAmount}`);
     } else {
       // The real reason from the CLOB is the whole point of these logs — dump it.
-      logErr(`REJECTED token=${tokenId}: ${resp?.errorMsg || "(no errorMsg)"} | resp=${safeJson(resp)}`);
+      logErr(`REJECTED token=${tokenId}: ${reason} | resp=${safeJson(resp)}`);
     }
     return {
       ok: success,
       orderId: resp?.orderID ?? null,
       status: resp?.status ?? null,
+      // Upstream HTTP-ish code (403 = geoblock, 400 = bad maker, etc.) so the
+      // caller can distinguish a permanent block from a transient failure.
+      code: success ? null : upstreamCode,
       filledShares: Number.isFinite(filled) ? filled : null,
       makingAmount: resp?.makingAmount ?? null,
-      error: success ? undefined : resp?.errorMsg || "order rejected",
+      error: success ? undefined : reason,
     };
   } catch (err) {
     // Drop the cached client so the next attempt re-derives creds (e.g. after a
